@@ -50,12 +50,16 @@ void execute_define(char *tokens[], int token_count) {
   new_table.nome_tabella[sizeof(new_table.nome_tabella) - 1] = '\0';                // Assicuriamoci che sia null-terminated
   new_table.num_colonne = 0;
 
+  ColumnDefinition column = parse_column_definition("id:int");
+  new_table.colonne[new_table.num_colonne] = column;
+  new_table.num_colonne++;
+
   for (int i = DEFINE_INIT_TOKENS; i < token_count; i++) {
 
     ColumnDefinition column = parse_column_definition(tokens[i]);
 
     // Verifica che la colonna sia stata estratta correttamente
-    if (strlen(column.nome_colonna) == 0 || strlen(column.tipo) == 0) {
+    if (strlen(column.nome_colonna) == 0) {
       printf("Errore: formato colonna non valido per %s\n", tokens[i]);
       return;
     }
@@ -63,6 +67,14 @@ void execute_define(char *tokens[], int token_count) {
     new_table.colonne[new_table.num_colonne] = column;
     new_table.num_colonne++;
   }
+
+  ColumnDefinition column = parse_column_definition("created_at:timestamp");
+  new_table.colonne[new_table.num_colonne] = column;
+  new_table.num_colonne++;
+
+  ColumnDefinition column = parse_column_definition("updated_at:timestamp");
+  new_table.colonne[new_table.num_colonne] = column;
+  new_table.num_colonne++;
 
   if (add_table_to_schema(&new_table) == SUCCESS) {
     printf("Tabella '%s' aggiunta con successo!\n", new_table.nome_tabella);
@@ -123,8 +135,8 @@ int validate_define_column_format_token(char *column) {
     return FALSE;
   }
 
-  if (!valid_column_type(col.tipo)) {                   // Il tipo della colonna deve essere di una tipologia valida (int o char)
-    printf("Errore: il tipo %s non è supportato. Usa int o char\n", col.tipo);
+  if (!valid_column_type(col.tipo.name)) {              // Il tipo della colonna deve essere di una tipologia valida.
+    printf("Errore: il tipo %s non è supportato.\n", col.tipo.name);
     return FALSE;
   }
 

@@ -26,17 +26,21 @@
 
 /**
  * Funzione per verificare se il tipo di colonna è valido.
- * I tipi supportati sono int e char.
+ * I tipi supportati sono definiti in column_types.
  * 
  * @param tipo_colonna Il tipo di colonna da verificare
  * @return 1 se il tipo è valido, 0 altrimenti
  */
+
 int valid_column_type(const char *tipo_colonna) {
-  if (strcmp(tipo_colonna, "int") != SUCCESS && strcmp(tipo_colonna, "char") != SUCCESS) {
-    printf("Errore: il tipo %s non è supportato. Usa int o char\n", tipo_colonna);
-    return FALSE;
+  for (size_t i = 0; i < NUM_TYPES; i++) {
+    if (strcmp(tipo_colonna, column_types[i].name) == SUCCESS) {
+      return TRUE;
+    }
   }
-  return TRUE;
+
+  printf("Errore: il tipo %s non è supportato.\n", tipo_colonna);
+  return FALSE;
 }
 
 
@@ -67,16 +71,33 @@ ColumnDefinition parse_column_definition(const char *token) {
   char *nome_colonna = token_copy;                              // La parte prima del separatore è il nome della colonna
   char *tipo_colonna = separatore + 1;                          // La parte dopo il separatore è il tipo della colonna
 
+  ColumnType col_type = get_column_type(tipo_colonna);
+  if (col_type.name == NULL) {
+    printf("Errore: il tipo \"%s\" non è supportato.\n", tipo_colonna);
+    return column;
+  }
+
   strncpy(column.nome_colonna, nome_colonna, sizeof(column.nome_colonna) - 1);
   column.nome_colonna[sizeof(column.nome_colonna) - 1] = '\0';
 
-  strncpy(column.tipo, tipo_colonna, sizeof(column.tipo) - 1);
-  column.tipo[sizeof(column.tipo) - 1] = '\0';
-
-  // Se il tipo è char, assegniamo lunghezza 100
-  column.lunghezza = (strcmp(column.tipo, "char") == SUCCESS) ? 100 : 0;  // Se non è char, la lunghezza è 0 perchè non è necessaria.
+  column.tipo = col_type;                                       // Assegna il puntatore alla struttura ColumnType
 
   return column;
+}
+
+/** 
+ * Funzione per ottenere il tipo di colonna.
+ * 
+ * @param tipo_colonna Il tipo di colonna da cercare
+ * @return Il puntatore alla struttura ColumnType se il tipo è valido, NULL altrimenti
+ */
+ColumnType get_column_type(const char *tipo_colonna) {
+  for (size_t i = 0; i < NUM_TYPES; i++) {
+    if (strcmp(tipo_colonna, column_types[i].name) == 0) {
+      return column_types[i];  // Restituisce l'oggetto ColumnType
+    }
+  }
+  return (ColumnType){NULL, 0};  // Tipo non valido, restituisce un oggetto con valori di default
 }
 
 

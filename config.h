@@ -41,11 +41,25 @@ typedef enum {                                  // Lista di tutti i comandi supp
   CMD_UNKNOWN
 } CommandType;
 
-typedef struct {                                // Questa struct mi serve per specificare il nome, il tipo e la lunghezza di una colonna
-  char nome_colonna[50];
-  char tipo[10];                                // Ad ora si possono inserire solo campi "char" o "int"
-  int lunghezza;                                // Se "char", avrà un valore (es. 100). Se "int", sarà 0.
+typedef struct {
+  const char *name;
+  int length;
+} ColumnType;
+
+typedef struct {
+    char nome_colonna[50];
+    ColumnType tipo;
 } ColumnDefinition;
+
+const ColumnType column_types[] = {
+  {"int", sizeof(int)},
+  {"char", 255},
+  {"float", sizeof(float)},
+  {"double", sizeof(double)},
+  {"timestamp", sizeof(long)}
+};
+
+#define NUM_TYPES (sizeof(column_types) / sizeof(column_types[0]))
 
 typedef struct {                                // Questa struct mi serve per specificare quante colonne ha una tabella
   char nome_tabella[50];
