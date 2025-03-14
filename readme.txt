@@ -14,12 +14,8 @@ L'utente può:
 
 TO-DO:
 
-- EXECUTE CREATE:
-  - se la tabella non esiste la creo
-  - ogni volta che creo un nuovo record, come primo attributo ci deve essere un ID incrementale e che non può essere modificato da nessuno
-  - ogni volta che creo un nuovo record, voglio che venga salvato il timestamp della sua creazione come campo :created_at. Anche questo non può mai essere modificato
-  - ogni volta che creo un nuovo record, voglio che venga creato anche un campo :update_at vuoto che contenga i timestamp di quando lo modifico.
-
+- Devo ricordarmi di avvisare l'utente e aggiungere il controllo che non serve mettere ID, CreatedAt e UpdatedAt come campi definiti in una tabella
+- Devo ricordarmi di aggiungere una validazione ai token di CREATE, UPDATE in cui vado a provare a convertire il valore che sto inserendo nel tipo effettivo
 
 - Ogni volta che aggiorno un record, voglio che venga salvato anche il timestamp della sua modifica sotto il campo :updated_at automaticamente. Questo campo non può essere modificato da nessuno.
 

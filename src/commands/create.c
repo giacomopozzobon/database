@@ -3,7 +3,8 @@
 #include <string.h>                 // Funzioni per la manipolazione delle stringhe: strcpy
 #include <stdbool.h>                // Definisce il tipo di dato bool e le costanti true e false
 #include <ctype.h>                  // Funzioni per la manipolazione dei caratteri: isalpha, isdigit
-#include <sys/stat.h>
+#include <unistd.h>                 // Funzioni per access(), F_OK, R_OK, W_OK
+#include <time.h>
 
 #include "create.h"
 #include "../schema.h"
@@ -13,11 +14,92 @@
 
 
 
+void execute_create(char *tokens[], int token_count) {
+  if (token_count < 3) {
+    printf("Errore: comando CREATE incompleto\n");
+    return;
+  }
+
+  const char *table_name = tokens[1];                                         // Nome della tabella
+  TableDefinition* table = get_table_from_schema(table_name);                 // Ottengo lo schema della tabella
+
+  void *record = create_table_record_struct(table_name);                      // Step 1: Creo una nuova struct per il record
+  if (record == NULL) {
+    printf("Errore: impossibile creare la struct del record\n");
+    return;
+  }
+
+  size_t offset = 0;
+
+  for (int i = 0; i < table->num_colonne; i++) {                              // Step 2: Scorro le colonne della tabella per scrivere i valori nei campi corrispondenti
+    ColumnDefinition col = table->colonne[i];
+
+    // ID, CreatedAt e UpdatedAt sono i campi che vengono valorizzati in modo automatico
+    // Non voglio che l'utente si preoccupi minimamente di aggiungere questi campi alle sue tabelle
+    if (strcmp(col.nome_colonna, "id") == SUCCESS) {                  // Imposto l'ID
+      int next_id = get_next_id_for_table(table_name);
+      memcpy((char*)record + offset, &next_id, col.tipo.length);
+    } else if (strcmp(col.nome_colonna, "created_at") == SUCCESS) {   // Imposto CreatedAt con il timestamp di creazione
+      long timestamp = get_current_timestamp();
+      memcpy((char*)record + offset, &timestamp, col.tipo.length);
+      continue;
+    } else if (strcmp(col.nome_colonna, "updated_at") == SUCCESS) {   // UpdatedAt è nullo perchè sarà inserito a ogni UPDATE
+      memcpy((char*)record + offset, get_null_value(col.tipo), col.tipo.length);
+      continue;
+    } else {
+
+
+      // Cerco tra i token il valore per questa colonna
+      int found = FALSE;
+
+      for (int j = CREATE_INIT_TOKENS; j < token_count; j++) {
+        // Se il token inizia con il nome della colonna, e subito dopo ci sono i :, allora devo valorizzare il campo
+        if (strncmp(tokens[j], col.nome_colonna, strlen(col.nome_colonna)) == 0 && tokens[j][strlen(col.nome_colonna)] == ':') {
+          found = TRUE;
+
+          char *valore = tokens[j] + strlen(col.nome_colonna) + 1;
+          memcpy((char*)record + offset, &valore, col.tipo.length);
+        }
+      }
+
+      if (!found) {                                                           // Per tutti gli altri campi, metto il loro NULL
+        memcpy((char*)record + offset, get_null_value(col.tipo), col.tipo.length);
+      }
+    }
+
+    offset += col.tipo.length;                                                // Aggiorno l'offset con la lunghezza della colonna attuale
+  }
+
+  // Step 3: Scrivo il record nella tabella corrispondente
+  create_tables_directory_if_not_exists();                                    // Crea la directory 'tables' se non esiste
+
+  char filename[100];
+  snprintf(filename, sizeof(filename), "tables/%s.bin", table_name);          // Nome del file binario
+
+  FILE *file = fopen(filename, "r+b");                                        // Se il file non esiste, lo creo
+
+  if (file == NULL) {
+    file = fopen(filename, "w+b");
+    if (file == NULL) {
+      printf("Errore nell'aprire il file della tabella\n");
+      return;
+    }
+  }
+
+  fseek(file, 0, SEEK_END);
+  fwrite(record, get_record_size(table_name), 1, file);
+  printf("Record aggiunto alla tabella %s\n", table_name);
+
+  free_table_record_struct(record, table_name);
+  fclose(file);
+  
+}
+
 
 
 /**
- * Questo metodo si occupa di validare il comando CREATE.
- * - Controlla che il comando abbia almeno 3 token
+ * Funzione che valida i token del comando CREATE.
+ * Devono essere almeno CREATE_INIT_TOKENS + 1 token
  * - Controlla che il primo token sia CREATE
  * - Controlla che il nome della tabella sia una stringa valida
  * - Controlla che i token successivi siano nella forma campo:valore
@@ -31,18 +113,16 @@
  * @return 1 se il comando è valido, 0 altrimenti
  */
 int validate_create(char *tokens[], int token_count) {
-  if (token_count < 3) {
+  if (token_count < CREATE_INIT_TOKENS + 1) {
     printf("❌ Errore: sintassi non valida. Usa CREATE <NomeTabella> <campo>:<valore> <campo>:<valore> …\n");
     return FALSE;
   }
 
-  // Il primo token deve essere CREATE
-  if (strcmp(tokens[0], "CREATE") != 0) {
+  if (strcmp(tokens[0], "CREATE") != SUCCESS) {
     printf("Errore: comando non riconosciuto\n");
     return FALSE;
   }
 
-  // Il secondo token deve essere una stringa che rappresenta il nome della tabella
   char *table_name = tokens[1];
   if (!verify_is_only_letters(table_name)) {
     printf("Errore: Il nome della tabella non è valido\n");
@@ -51,71 +131,34 @@ int validate_create(char *tokens[], int token_count) {
 
   // Cerco la tabella nello schema
   TableDefinition *table = get_table_from_schema(table_name);
-
-  // Se la tabella non è trovata
   if (table == NULL) {
     printf("❌ Errore: La tabella '%s' non esiste nello schema\n", table_name);
     return FALSE;
   }
 
   // Verifica che tutti i token rimanenti siano nella forma campo:valore
-  for (int i = 2; i < token_count; i++) {
-    char *campo, *valore;
-    char buffer[100];
+  ColumnValueDefinition couple;
 
-    strncpy(buffer, tokens[i], sizeof(buffer) - 1);
-    buffer[sizeof(buffer) - 1] = '\0';
+  for (int i = CREATE_INIT_TOKENS; i < token_count; i++) {
+    couple = parse_column_value_definition(table, tokens[i]);
 
-    char *separator = strchr(buffer, ':');
-    if (!separator) {
-      printf("❌ Errore: il campo '%s' non è nel formato corretto (campo:valore)\n", tokens[i]);
-      return 0;
-    }
-
-    *separator = '\0';  // Spezza la stringa in due parti
-    campo = buffer;
-    valore = separator + 1;
-
-    // Controlla se il campo esiste nello schema della tabella
-    int field_found = FALSE;
-
-    for (int j = 0; j < table->num_colonne; j++) {
-      if (strcmp(table->colonne[j].nome_colonna, campo) == SUCCESS) {
-        field_found = TRUE;
-
-        // Assicuriamoci che il valore non sia vuoto
-        if (valore == NULL || strlen(valore) == 0) {
-          printf("❌ Errore: il campo '%s' deve avere un valore dopo ':'\n", campo);
-          return 0;
-        }
-
-        // Se il tipo è char, controlla la lunghezza del valore
-        if (strcmp(table->colonne[j].tipo, "char") == SUCCESS && strlen(valore) > (size_t)table->colonne[j].lunghezza) {
-          printf("❌ Errore: il valore per il campo '%s' supera la lunghezza massima di %d caratteri\n", campo, table->colonne[j].lunghezza);
-          return 0;
-        }
-
-        // Se il tipo è int, verifica che sia un numero valido
-        if (strcmp(table->colonne[j].tipo, "int") == SUCCESS) {
-          char *endptr;
-          strtol(valore, &endptr, 10);
-          if (*endptr != '\0') {
-            printf("❌ Errore: il valore '%s' per il campo '%s' non è un numero valido\n", valore, campo);
-            return 0;
-          }
-        }
-
-        break;
-      }
-    }
-
-    if (!field_found) {
-      printf("❌ Errore: il campo '%s' non esiste nella tabella '%s'\n", campo, table_name);
-      return FALSE;
+    if (strlen(couple.campo.nome_colonna) == 0) {
+      printf("Errore: token non valido per %s\n", tokens[i]);
+      return;
     }
   }
 
 
   printf("✅ Comando CREATE valido\n");
   return TRUE;
+}
+
+
+// Funzione di utilità per creare la cartella se non esiste
+void create_tables_directory_if_not_exists() {
+  if (access(TABLES_DIR, F_OK) == -1) { // Controlla se esiste
+    if (mkdir(TABLES_DIR, 0700) == -1) {
+      perror("Errore nella creazione della cartella");
+    }
+  }
 }

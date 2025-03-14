@@ -19,8 +19,8 @@
 #include <stdlib.h>                 // Funzioni per la gestione della memoria: malloc, free, exit
 #include <string.h>                 // Funzioni per la manipolazione delle stringhe: strcpy
 
-#include "src/schema.h"                 // Include lo schema per la gestione delle tabelle
-#include "src/parser.h"                 // Include il parser per elaborare i comandi & il file config.h per le costanti
+#include "src/schema.h"
+#include "src/parser.h"
 
 
 /* Funzione principale del programma
@@ -48,7 +48,7 @@ int main () {
   printf("▪️ CREATE Utente nome:'Luca' eta:32 ...\n");
   printf("▪️ READ Utente\n");
   printf("▪️ UPDATE Utente 1 nome:'Mario'\n");
-  printf("▪️ SEARCH Utente nome:'Luca'\n");
+  printf("▪️ FIND Utente nome:'Luca'\n");
   printf("▪️ DELETE Utente 1\n");
   printf("\n");
   printf("Inserisci un comando oppure 'EXIT' per uscire.\n");

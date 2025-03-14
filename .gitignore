@@ -1,2 +1,3 @@
 schema.bin
 tables/
+*.o
