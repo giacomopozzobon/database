@@ -5,6 +5,7 @@
 #include <ctype.h>                  // Funzioni per la manipolazione dei caratteri: isalpha, isdigit
 #include <unistd.h>                 // Funzioni per access(), F_OK, R_OK, W_OK
 #include <time.h>
+#include <sys/stat.h>
 
 #include "create.h"
 #include "../schema.h"
@@ -31,8 +32,11 @@ void execute_create(char *tokens[], int token_count) {
 
   size_t offset = 0;
 
+  ColumnDefinition col;
+  ColumnValueDefinition col_val;
+
   for (int i = 0; i < table->num_colonne; i++) {                              // Step 2: Scorro le colonne della tabella per scrivere i valori nei campi corrispondenti
-    ColumnDefinition col = table->colonne[i];
+    col = table->colonne[i];
 
     // ID, CreatedAt e UpdatedAt sono i campi che vengono valorizzati in modo automatico
     // Non voglio che l'utente si preoccupi minimamente di aggiungere questi campi alle sue tabelle
@@ -53,12 +57,13 @@ void execute_create(char *tokens[], int token_count) {
       int found = FALSE;
 
       for (int j = CREATE_INIT_TOKENS; j < token_count; j++) {
-        // Se il token inizia con il nome della colonna, e subito dopo ci sono i :, allora devo valorizzare il campo
-        if (strncmp(tokens[j], col.nome_colonna, strlen(col.nome_colonna)) == 0 && tokens[j][strlen(col.nome_colonna)] == ':') {
-          found = TRUE;
+        col_val = parse_column_value_definition(table, tokens[j]);
 
-          char *valore = tokens[j] + strlen(col.nome_colonna) + 1;
-          memcpy((char*)record + offset, &valore, col.tipo.length);
+        if (col_val.valore && strcmp(col_val.campo.nome_colonna, col.nome_colonna) == SUCCESS) {
+          memcpy((char*)record + offset, col_val.valore, col.tipo.length);
+          free(col_val.valore); // Libera la memoria allocata in parse_column_value_definition
+          found = TRUE;
+          break;
         }
       }
 
@@ -71,27 +76,15 @@ void execute_create(char *tokens[], int token_count) {
   }
 
   // Step 3: Scrivo il record nella tabella corrispondente
-  create_tables_directory_if_not_exists();                                    // Crea la directory 'tables' se non esiste
+  FILE* file = open_table_file(table_name, "a+b");
 
-  char filename[100];
-  snprintf(filename, sizeof(filename), "tables/%s.bin", table_name);          // Nome del file binario
+  if (file) {
+    fwrite(record, get_record_size(table_name), 1, file);
+    printf("Record aggiunto alla tabella %s\n", table_name);
 
-  FILE *file = fopen(filename, "r+b");                                        // Se il file non esiste, lo creo
-
-  if (file == NULL) {
-    file = fopen(filename, "w+b");
-    if (file == NULL) {
-      printf("Errore nell'aprire il file della tabella\n");
-      return;
-    }
+    free_table_record_struct(record);
+    fclose(file);
   }
-
-  fseek(file, 0, SEEK_END);
-  fwrite(record, get_record_size(table_name), 1, file);
-  printf("Record aggiunto alla tabella %s\n", table_name);
-
-  free_table_record_struct(record, table_name);
-  fclose(file);
   
 }
 
@@ -140,11 +133,12 @@ int validate_create(char *tokens[], int token_count) {
   ColumnValueDefinition couple;
 
   for (int i = CREATE_INIT_TOKENS; i < token_count; i++) {
+    printf("Step hihi dentro for: %i %s\n", i, tokens[i]);
     couple = parse_column_value_definition(table, tokens[i]);
 
     if (strlen(couple.campo.nome_colonna) == 0) {
       printf("Errore: token non valido per %s\n", tokens[i]);
-      return;
+      return FALSE;
     }
   }
 

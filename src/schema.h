@@ -16,7 +16,7 @@ void print_schema();
 int write_schema_to_file();
 
 void* create_table_record_struct(const char* table_name);
-void free_table_record_struct(void* record, const char* table_name);
+void free_table_record_struct(void* record);
 size_t get_record_size(const char* table_name);
 
 #endif

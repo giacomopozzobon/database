@@ -27,6 +27,7 @@
 #include <stdbool.h>                // Definisce il tipo di dato bool e le costanti true e false
 #include <ctype.h>                  // Funzioni per la manipolazione dei caratteri: isalpha, isdigit
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "utils.h"
 #include "schema.h"
@@ -61,26 +62,16 @@ const ColumnType column_types[] = {
  */
 ColumnDefinition parse_column_definition(const char *token) {
   ColumnDefinition column;
-
   memset(&column, 0, sizeof(ColumnDefinition));                 // Inizializza la struttura a 0. è importante per evitare valori non inizializzati
 
-  char token_copy[100];                                         // Creiamo una copia per evitare di modificare il token originale
-  strncpy(token_copy, token, sizeof(token_copy) - 1);
-  token_copy[sizeof(token_copy) - 1] = '\0';                    // Dopo ogni strncopy devo assicurarmi che sia null-terminated
-
-
-  char *separatore = strchr(token_copy, ':');                   // Cerca il carattere ':'
-  if (!separatore) {
+  char nome_colonna[100], tipo_colonna[100];
+  if (split_token(token, ':', nome_colonna, tipo_colonna) == FAILURE) {
     printf("Errore: il campo %s non è definito correttamente.\n", token);
     return column;
   }
 
-  *separatore = '\0';                                           // Divide la stringa in due parti
-  char *nome_colonna = token_copy;                              // La parte prima del separatore è il nome della colonna
-  char *tipo_colonna = separatore + 1;                          // La parte dopo il separatore è il tipo della colonna
-
   ColumnType col_type = parse_column_type(tipo_colonna);
-  if (col_type.name == NULL) {
+    if (strcmp(col_type.name, "unknown") == SUCCESS) {
     printf("Errore: il tipo \"%s\" non è supportato.\n", tipo_colonna);
     return column;
   }
@@ -101,7 +92,7 @@ ColumnDefinition parse_column_definition(const char *token) {
  * Ogni campo ha il suo nome e la sua dimensione.
  * 
  * @param tipo_colonna Il tipo di colonna da cercare
- * @return Il puntatore alla struttura ColumnType se il tipo è valido, NULL altrimenti
+ * @return Il puntatore alla struttura ColumnType se il tipo è valido, unknown altrimenti
  */
 ColumnType parse_column_type(const char *tipo_colonna) {
   for (size_t i = 0; i < COLUMN_TYPES_COUNT; i++) {
@@ -109,7 +100,7 @@ ColumnType parse_column_type(const char *tipo_colonna) {
       return column_types[i];  // Restituisce l'oggetto ColumnType
     }
   }
-  return (ColumnType){NULL, 0};  // Tipo non valido, restituisce un oggetto con valori di default
+  return (ColumnType){"unknown", 0, false};  // Tipo non valido, restituisce un oggetto con valori di default
 }
 
 /** 
@@ -123,24 +114,13 @@ ColumnType parse_column_type(const char *tipo_colonna) {
 */
 ColumnValueDefinition parse_column_value_definition(TableDefinition *table, const char *token) {
   ColumnValueDefinition couple;
-
   memset(&couple, 0, sizeof(ColumnValueDefinition));            // Inizializza la struttura a 0. è importante per evitare valori non inizializzati
 
-  char token_copy[100];                                         // Creiamo una copia per evitare di modificare il token originale
-  strncpy(token_copy, token, sizeof(token_copy) - 1);
-  token_copy[sizeof(token_copy) - 1] = '\0';                    // Dopo ogni strncopy devo assicurarmi che sia null-terminated
-
-
-  char *separatore = strchr(token_copy, ':');                   // Cerca il carattere ':'
-  if (!separatore) {
+  char nome_colonna[100], valore[100];
+  if (split_token(token, ':', nome_colonna, valore) == FAILURE) {
     printf("Errore: il campo %s non è definito correttamente.\n", token);
     return couple;
   }
-
-  *separatore = '\0';                                           // Divide la stringa in due parti
-  char *nome_colonna = token_copy;                              // La parte prima del separatore è il nome della colonna
-  char *valore = separatore + 1;                                // La parte dopo il separatore è il valore del campo
-
 
   // Cerco la colonna nella tabella
   ColumnDefinition *col_def = NULL;
@@ -150,22 +130,23 @@ ColumnValueDefinition parse_column_value_definition(TableDefinition *table, cons
       break;
     }
   }
+  if (!col_def) { return couple; }                              // Se la colonna non esiste, ritorna un oggetto "non valido"
 
-  if (!col_def) { return couple; }
-
-  ColumnType tipo = col_def->tipo;
-  if (tipo.name == NULL) { return couple; }                     // Se il tipo è nullo, ritorniamo un oggetto "non valido"
+  ColumnType tipo = col_def->tipo;                              // Ottengo il tipo di colonna
   couple.valore = malloc(tipo.length);                          // Alloco spazio per il valore e lo converto
-  if (!couple.valore) { return couple; }                        // Se la memoria non può essere allocata, ritorna un oggetto "non valido"
+  if (!couple.valore) { 
+    printf("Errore: malloc fallita per la colonna %s\n", nome_colonna);
+    return couple; 
+  }                        // Se la memoria non può essere allocata, ritorna un oggetto "non valido"
 
   if (!tipo.convert(valore, couple.valore)) {                   // Converto il valore
+    printf("Errore: funzione di conversione NULL per il tipo %s\n", tipo.name);
     free(couple.valore);
     couple.valore = NULL;
     return couple;
   }
 
-  couple.campo = col_def;
-
+  couple.campo = *col_def;
   return couple;
 }
 
@@ -216,7 +197,7 @@ int get_next_id_for_table(const char *table_name) {
   int last_id = *((int*)record);                                                    // Estraggo l'ID dal record (è sempre il primo campo)
 
   fclose(file);
-  free_table_record_struct(record, table_name);                                     // Libero la memoria
+  free_table_record_struct(record);                                                 // Libero la memoria
 
   return last_id + 1;                                                               // Ritorno l'ID
 }
@@ -246,6 +227,31 @@ const void *get_null_value(ColumnType tipo) {
   if (strcmp(tipo.name, "timestamp") == SUCCESS) return &null_timestamp;
   if (strcmp(tipo.name, "bool")      == SUCCESS) return &null_bool;
   return NULL;
+}
+
+
+/**
+ * Funzione per separare un token in due parti sulla base di un separatore.
+ * @param token La stringa da analizzare
+ * @param separatore Il carattere separatore
+ * @param prima La parte prima del separatore
+ * @param dopo La parte dopo il separatore
+ * @return 0 se la separazione è andata a buon fine, -1 altrimenti
+ */
+int split_token(const char *token, char separatore, char *prima, char *dopo) {
+  char *pos = strchr(token, separatore); // Trova la posizione del separatore
+  if (!pos) {
+      return FAILURE;  // Errore: separatore non trovato
+  }
+
+  // Copia la parte prima del separatore
+  strncpy(prima, token, pos - token);
+  prima[pos - token] = '\0';  // Aggiungi il terminatore
+
+  // Copia la parte dopo il separatore
+  strcpy(dopo, pos + 1);  // Tutto dopo il separatore
+
+  return SUCCESS;  // Separazione riuscita
 }
 
 
@@ -316,7 +322,64 @@ bool convert_char_to_timestamp(const char *input, void *output) {
 }
 
 bool convert_char_to_string(const char *input, void *output) {
-    if (strlen(input) >= 255) { return false; } // La stringa è troppo lunga
-    strcpy((char *)output, input);              // Copia diretta in output
-    return true;
+  printf("ciao\n");
+  if (input == NULL || output == NULL) {
+      return false;  // Se l'input o l'output sono NULL, fallisce
+  }
+
+
+  // Assicurati che non ci siano buffer overflow o manipolazioni non valide
+  strncpy((char*)output, input, 255);
+  ((char*)output)[254] = '\0';  // Assicurati che la stringa sia terminata correttamente
+
+  return true;
+}
+
+
+/**
+ * Funzione per correggere le funzioni di conversione per i tipi di dati.
+ * Questo è necessario perché quando scrivo e leggo lo schema sul file, scrivo i ColumnType,
+ * I ColumnType contengono i puntatori alle funzioni di conversione.
+ * Quando leggo lo schema dopo un riavvio del programma, i puntatori alle funzioni di conversione non sono più validi.
+ * Quindi, devo riassegnare i puntatori alle funzioni di conversione.
+ */
+void fix_conversion_functions() {
+  for (int i = 0; i < schema.num_tabelle; i++) {
+      for (int j = 0; j < schema.tabelle[i].num_colonne; j++) {
+          ColumnDefinition *col = &schema.tabelle[i].colonne[j];
+          for (int k = 0; k < (int)COLUMN_TYPES_COUNT; k++) {
+              if (strcmp(col->tipo.name, column_types[k].name) == 0) {
+                  col->tipo.convert = column_types[k].convert;
+                  break;
+              }
+          }
+      }
+  }
+}
+
+
+
+FILE* open_table_file(const char* table_name, const char* mode) {
+  struct stat st = {0};
+  if (stat(TABLES_DIR, &st) == -1) {
+    perror(TABLES_DIR " non esiste");
+    return NULL;
+  }
+
+  // Costruisce il percorso del file
+  char filepath[256];
+  snprintf(filepath, sizeof(filepath), "%s/%s.bin", TABLES_DIR, table_name);
+
+  // Tenta di aprire il file con la modalità richiesta
+  FILE* file = fopen(filepath, mode);
+  if (!file && strcmp(mode, "a+b") == 0) {
+    // Se il file non esiste e si sta aprendo in "a+b", crealo in "w+b"
+    file = fopen(filepath, "w+b");
+    if (!file) {
+      perror("Errore nella creazione del file");
+      return NULL;
+    }
+  }
+
+  return file;
 }

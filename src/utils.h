@@ -20,8 +20,13 @@ ColumnValueDefinition parse_column_value_definition(TableDefinition *table, cons
 int get_next_id_for_table(const char *table_name);
 const void *get_null_value(ColumnType tipo);
 
+int split_token(const char *token, char separatore, char *prima, char *dopo);
+
 int verify_is_only_letters(const char *s);
 long get_current_timestamp();
+
+void fix_conversion_functions();
+FILE* open_table_file(const char* table_name, const char* mode);
 
 
 #endif

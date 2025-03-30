@@ -53,6 +53,7 @@
 #include "schema.h"
 #include "commands/define.h"
 #include "commands/create.h"
+#include "commands/read.h"
 
 /**
  * Questa funzione processa il comando inserito dall'utente.
@@ -112,6 +113,7 @@ void process_command(char *input) {
       if (validate_create(tokens, token_count)) { execute_create(tokens, token_count); }
       break;
     case CMD_READ:
+      print_table(tokens[1]);
       // validate_read(tokens, token_count);
       break;
     case CMD_UPDATE:

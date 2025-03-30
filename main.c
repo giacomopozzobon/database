@@ -21,6 +21,7 @@
 
 #include "src/schema.h"
 #include "src/parser.h"
+#include "src/utils.h"
 
 
 /* Funzione principale del programma
@@ -34,6 +35,14 @@ int main () {
   if(load_schema() != SUCCESS) {                // Carica lo schema delle tabelle
     printf("Chiusura del programma...\n");
     return FAILURE;
+  } else {
+    /** Attenzione qui. Siccome quando scrivo e leggo lo schema sul file, scrivo i ColumnType,
+     *  I ColumnType contengono i puntatori alle funzioni di conversione.
+     *  Quando leggo lo schema dopo un riavvio del programma, i puntatori alle funzioni di conversione non sono più validi.
+     *  Quindi, devo riassegnare i puntatori alle funzioni di conversione.
+    */
+
+    fix_conversion_functions();                  // Corregge le funzioni di conversione per i tipi di dati
   }
 
   char input[MAX_INPUT_SIZE];                   // Dichiaro un array di caratteri per contenere l'input dell'utente

@@ -12,6 +12,15 @@ L'utente può:
 
 
 
+PROBLEMA DA RISOLVERE
+- Il timestamp created_at non viene creato correttamente in EXECUTE CREATE
+
+- Sembra che la prima volta che avvio il programma e creo lo schema da capo e creo dei record va tutto bene
+  Quando chiudo e riapro il programma, posso leggere lo schema e le tabelle, ma se:
+  se provo a creare un record di una tabella SEGFAULT
+
+
+
 TO-DO:
 
 - Devo ricordarmi di avvisare l'utente e aggiungere il controllo che non serve mettere ID, CreatedAt e UpdatedAt come campi definiti in una tabella

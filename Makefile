@@ -8,7 +8,7 @@ CMD_DIR = $(SRC_DIR)/commands
 # Lista dei file sorgenti
 SRC = main.c \
       $(SRC_DIR)/parser.c $(SRC_DIR)/schema.c $(SRC_DIR)/utils.c \
-      $(CMD_DIR)/define.c $(CMD_DIR)/create.c
+      $(CMD_DIR)/define.c $(CMD_DIR)/create.c $(CMD_DIR)/read.c
 
 # Lista degli oggetti compilati (ogni .c diventa un .o)
 OBJ = $(SRC:.c=.o)

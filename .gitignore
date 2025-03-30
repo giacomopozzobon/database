@@ -1,3 +1,4 @@
 schema.bin
-tables/
+tables/*
 *.o
+.DS_Store

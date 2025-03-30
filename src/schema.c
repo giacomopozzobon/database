@@ -29,20 +29,10 @@ int load_schema() {
   } else {
     printf ("Caricamento schema esistente...\n");                                   // Se il file esiste, carica lo schema
 
-    if (fread(&schema.num_tabelle, sizeof(int), 1, file) != TRUE) {                 // Leggo il numero di tabelle
+    if (fread(&schema, sizeof(Schema), 1, file) != TRUE) {                          // Leggo lo schema dal file
       printf("Errore: dati corrotti nel file schema\n");
       fclose(file);
       return FAILURE;
-    }
-
-    for (int i = 0; i < schema.num_tabelle; i++) {                                  // Per ogni tabella
-      TableDefinition *tabella = &schema.tabelle[i];                                // Puntatore alla tabella i-esima
-
-      if (fread(tabella, sizeof(TableDefinition), 1, file) != TRUE) {               // Leggo la definizione della tabella
-        printf("Errore: dati corrotti nella tabella %d\n", i);
-        fclose(file);
-        return FAILURE;
-      }
     }
   }
 
@@ -181,7 +171,6 @@ int write_schema_to_file() {
     return FAILURE;
   }
 
-  // Scrive la struttura Schema nel file
   fwrite(&schema, sizeof(Schema), 1, file);
   fclose(file);
   return SUCCESS;
@@ -200,66 +189,28 @@ void print_schema() {
 
     for (int j = 0; j < table->num_colonne; j++) {
       ColumnDefinition *column = &table->colonne[j];
-      printf("- %s (%s, %d)\n", column->nome_colonna, column->tipo.name, column->tipo.length);
+      printf("- %s (%s, %d, Convert: %p)\n", column->nome_colonna, column->tipo.name, column->tipo.length, column->tipo.convert);
     }
   }
 }
 
 
-/** 
- * Questa funzione crea una struct dinamica per rappresentare un record di una tabella di un database. 
- * La tabella è descritta da TableDefinition, che contiene informazioni sulle colonne della tabella. 
- * La funzione si occupa di allocare dinamicamente la memoria per ogni campo della tabella 
- * (ad esempio, int, float, char, ecc.) e di restituire un puntatore alla struct allocata.
- * 
-*/
 void* create_table_record_struct(const char* table_name) {
-  TableDefinition* table = get_table_from_schema(table_name);                // Prendo lo schema della tabella
+  TableDefinition* table = get_table_from_schema(table_name);
   if (!table) { return NULL; }
 
-  // Attenzione qui. Qua devo allocare una memoria sufficiente per contenere un numero di puntatori pari al num colonne
-  void** record = malloc(sizeof(void*) * table->num_colonne);                // Alloca la memoria per i puntatori
+  size_t record_size = get_record_size(table_name);  // Calcolo la dimensione totale
+  void* record = malloc(record_size);               // Allocazione unica
   if (!record) { return NULL; }
 
-  for (int i = 0; i < table->num_colonne; i++) {                              // Alloco la memoria per ogni campo
-    ColumnDefinition col = table->colonne[i];
-
-    // Attenzione qui. Per ciascun tipo di colonna, viene allocata dinamicamente la memoria necessaria a contenere un singolo valore del tipo appropriato.
-    // Per una colonna di tipo intero (int), viene allocata memoria per un singolo int con malloc(sizeof(int)). Questo significa che la variabile record[i] conterrà un puntatore a un intero.
-    // E cosi per ogni tipologia di dato
-
-    if (strcmp(col.tipo.name, "char") == SUCCESS) {
-      record[i] = malloc(col.tipo.length + 1);  // +1 per il terminatore stringa
-    } else {
-      record[i] = malloc(col.tipo.length);
-    }
-
-    if (!record[i]) {  // Se malloc fallisce, libero tutta la memoria allocata e ritorno NULL
-      for (int j = 0; j < i; j++) { free(record[j]); }
-      free(record);
-      return NULL;
-    }
-  }
+  memset(record, 0, record_size);  // Inizializza la memoria a 0 (per evitare dati sporchi)
 
   return record;
 }
 
-/** 
- * Questa funzione libera la memoria della struct della tabella (creata nella funzione sopra)
- * La tabella è descritta da TableDefinition, che contiene informazioni sulle colonne della tabella. 
- * Per ogni colonna della tabella, libera lo spazio del record relativo
-*/
-void free_table_record_struct(void* record, const char* table_name) {
-  TableDefinition* table = get_table_from_schema(table_name);
-  if (!table || !record) return;
 
-  void** fields = (void**)record;  // Cast per accedere correttamente ai campi
-
-  for (int i = 0; i < table->num_colonne; i++) {
-    if (fields[i]) { free(fields[i]); }   // Libero la memoria di ogni puntatore
-  }
-
-  free(record);  // Liberiamo la memoria principale
+void free_table_record_struct(void* record) {
+  free(record);
 }
 
 
