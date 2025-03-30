@@ -2,3 +2,4 @@ schema.bin
 tables/*
 *.o
 .DS_Store
+todo.txt
